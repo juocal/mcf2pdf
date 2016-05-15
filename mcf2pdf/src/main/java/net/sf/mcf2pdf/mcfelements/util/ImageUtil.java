@@ -166,19 +166,19 @@ public final class ImageUtil {
 	}
 
 	public static BufferedImage readImage(File imageFile) throws IOException {
-		
+
+		//SVG Handling
 		if(isImageSVG(imageFile)) {
-			//SVG handling
 			return rasterizeSVGFile(imageFile);
 		}
 		
-		//Commit test
-		
-		//Normal ImageHandling
+		//Commence with normal image handling
 		int rotation = 0;
+		//PNG does not have a rotation
 		if(!isImagePNG(imageFile)) {	
 			rotation = getImageRotation(imageFile);
 		}
+		//Read the rotation of the image
 		BufferedImage img = ImageIO.read(imageFile);
 
 		if (rotation == 0) {
