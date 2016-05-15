@@ -172,8 +172,6 @@ public final class ImageUtil {
 			return rasterizeSVGFile(imageFile);
 		}
 		
-		//Commit test
-		
 		//Normal ImageHandling
 		int rotation = 0;
 		if(!isImagePNG(imageFile)) {	
