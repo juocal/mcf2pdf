@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.ref.WeakReference;
-import java.util.Locale;
 
 import javax.imageio.ImageIO;
 
@@ -29,16 +28,20 @@ import org.apache.batik.bridge.GVTBuilder;
 import org.apache.batik.bridge.UserAgentAdapter;
 import org.apache.batik.bridge.ViewBox;
 import org.apache.batik.dom.svg.SAXSVGDocumentFactory;
+import org.apache.batik.dom.svg.SVGDOMImplementation;
 import org.apache.batik.ext.awt.RenderingHintsKeyExt;
 import org.apache.batik.gvt.GraphicsNode;
+import org.apache.batik.transcoder.TranscoderException;
+import org.apache.batik.transcoder.TranscoderInput;
+import org.apache.batik.transcoder.TranscoderOutput;
+import org.apache.batik.transcoder.TranscodingHints;
+import org.apache.batik.transcoder.image.ImageTranscoder;
+import org.apache.batik.util.SVGConstants;
 import org.apache.batik.util.XMLResourceDescriptor;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.w3c.dom.svg.SVGDocument;
 import org.w3c.dom.svg.SVGPreserveAspectRatio;
-
-import ar.com.hjg.pngj.PngReader;
-import ar.com.hjg.pngj.PngjException;
-import ar.com.hjg.pngj.chunks.PngMetadata;
 
 import com.drew.imaging.ImageMetadataReader;
 import com.drew.imaging.ImageProcessingException;
@@ -77,9 +80,105 @@ public final class ImageUtil {
 
 		return new float[] { DEFAULT_RESOLUTION, DEFAULT_RESOLUTION };
 	}
+	
+	public static String getFileExtention(File imageFile) {
+		String filename = imageFile.getAbsolutePath();
+		return getFilenameExtention(filename);		
+	}
+	
+	public static String getFilenameExtention(String filename) {
+		String extension = "";
+
+		int i = filename.lastIndexOf('.');
+		int p = Math.max(filename.lastIndexOf('/'), filename.lastIndexOf('\\'));
+
+		if (i > p) {
+		    extension = filename.substring(i+1);
+		}
+		return extension;
+	}	
+	
+	public static boolean isImageSVG(File imageFile) {
+		return (getFileExtention(imageFile).equals("svg"));
+	}
+	
+	public static boolean isImagePNG(File imageFile) {
+		return (getFileExtention(imageFile).equals("png"));
+	}	
+	
+	public static BufferedImage rasterizeSVGFile(File svgFile) throws IOException {
+
+	    final BufferedImage[] imagePointer = new BufferedImage[1];
+
+	    // Rendering hints can't be set programatically, so
+	    // we override defaults with a temporary stylesheet.
+	    // These defaults emphasize quality and precision, and
+	    // are more similar to the defaults of other SVG viewers.
+	    // SVG documents can still override these defaults.
+	    String css = "svg {" +
+	            "shape-rendering: geometricPrecision;" +
+	            "text-rendering:  geometricPrecision;" +
+	            "color-rendering: optimizeQuality;" +
+	            "image-rendering: optimizeQuality;" +
+	            "}";
+	    File cssFile = File.createTempFile("batik-default-override-", ".css");
+	    FileUtils.writeStringToFile(cssFile, css);
+
+	    TranscodingHints transcoderHints = new TranscodingHints();
+	    transcoderHints.put(ImageTranscoder.KEY_XML_PARSER_VALIDATING, Boolean.FALSE);
+	    transcoderHints.put(ImageTranscoder.KEY_DOM_IMPLEMENTATION,
+	            SVGDOMImplementation.getDOMImplementation());
+	    transcoderHints.put(ImageTranscoder.KEY_DOCUMENT_ELEMENT_NAMESPACE_URI,
+	            SVGConstants.SVG_NAMESPACE_URI);
+	    transcoderHints.put(ImageTranscoder.KEY_DOCUMENT_ELEMENT, "svg");
+	    transcoderHints.put(ImageTranscoder.KEY_USER_STYLESHEET_URI, cssFile.toURI().toString());
+
+	    try {
+
+	        TranscoderInput input = new TranscoderInput(new FileInputStream(svgFile));
+
+	        ImageTranscoder t = new ImageTranscoder() {
+
+	            @Override
+	            public BufferedImage createImage(int w, int h) {
+	                return new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+	            }
+
+	            @Override
+	            public void writeImage(BufferedImage image, TranscoderOutput out)
+	                    throws TranscoderException {
+	                imagePointer[0] = image;
+	            }
+	        };
+	        t.setTranscodingHints(transcoderHints);
+	        t.transcode(input, null);
+	    }
+	    catch (TranscoderException ex) {
+	        // Requires Java 6
+	        ex.printStackTrace();
+	        throw new IOException("Couldn't convert " + svgFile);
+	    }
+	    finally {
+	        cssFile.delete();
+	    }
+
+	    return imagePointer[0];
+	}
 
 	public static BufferedImage readImage(File imageFile) throws IOException {
-		int rotation = getImageRotation(imageFile);
+		
+		if(isImageSVG(imageFile)) {
+			//SVG handling
+			return rasterizeSVGFile(imageFile);
+		}
+		
+		//Commit test
+		
+		//Normal ImageHandling
+		int rotation = 0;
+		if(!isImagePNG(imageFile)) {	
+			rotation = getImageRotation(imageFile);
+		}
 		BufferedImage img = ImageIO.read(imageFile);
 
 		if (rotation == 0) {
